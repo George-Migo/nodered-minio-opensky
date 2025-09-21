@@ -1,0 +1,123 @@
+pipeline {
+  agent any
+
+    options {
+    timestamps()
+    ansiColor('xterm')
+  }
+
+  environment {
+    APP_COMPOSE = 'flights-project/docker-compose.yml'
+    MINIO_ALIAS = 'local'
+    MINIO_URL   = 'http://minio:9000'
+    MINIO_USER  = 'minioadmin'
+    MINIO_PASS  = 'minioadmin'
+    MINIO_BUCKET= 'flights-data'   
+    APP_NET     = 'flightsnet'     // <-- το σταθερό όνομα δικτύου από το compose
+  }
+
+  stages {
+    stage('Build app image') {
+      steps {
+        sh 'docker compose -f ${APP_COMPOSE} build --pull'
+      }
+    }
+
+    stage('Compose Up') {
+      steps {
+        sh '''
+          set -e
+
+          docker volume create flights-project_node_red_data >/dev/null 2>&1 || true
+          docker run --rm -v flights-project_node_red_data:/data alpine sh -c "chown -R 1000:1000 /data || true"
+          docker compose -f ${APP_COMPOSE} up -d --wait || true
+
+          i=0
+          while [ $i -lt 60 ]; do
+            s=$(docker inspect --format='{{.State.Health.Status}}' mynodered 2>/dev/null || echo "missing")
+            if [ "$s" = "healthy" ]; then
+              echo "Node-RED is healthy ✅"
+              exit 0
+            fi
+            sleep 2
+            i=$((i+1))
+          done
+
+          echo "❌ Node-RED stayed unhealthy. Last 200 lines of logs:"
+          docker logs --tail=200 mynodered || true
+          exit 1
+        '''
+      }
+    }
+
+    stage('Prep MinIO (bucket)') {
+      steps {
+        sh '''
+          # config cache για το mc ώστε να κρατάει το alias μεταξύ runs
+          docker volume create mcconfig >/dev/null 2>&1 || true
+
+          # set alias
+          docker run --rm --network ${APP_NET} -v mcconfig:/root/.mc \
+            minio/mc alias set ${MINIO_ALIAS} ${MINIO_URL} ${MINIO_USER} ${MINIO_PASS}
+
+          # make bucket (no-op αν υπάρχει)
+          docker run --rm --network ${APP_NET} -v mcconfig:/root/.mc \
+            minio/mc mb -p ${MINIO_ALIAS}/${MINIO_BUCKET} || true
+
+          # λίστα για επιβεβαίωση
+          docker run --rm --network ${APP_NET} -v mcconfig:/root/.mc \
+            minio/mc ls ${MINIO_ALIAS}
+        '''
+      }
+    }
+
+    stage('Smoke checks') {
+      steps {
+        sh '''
+          # Node-RED UI
+          docker run --rm --network ${APP_NET} curlimages/curl:8.10.1 \
+            -fsS http://mynodered:1880 >/dev/null
+
+          # MinIO Console
+          docker run --rm --network ${APP_NET} curlimages/curl:8.10.1 \
+            -fsS http://myminio:9001 >/dev/null
+        '''
+      }
+    }
+
+    stage('Integration test (flow → MinIO)') {
+      steps {
+        sh '''
+          # Άφησε τη ροή λίγο να τρέξει
+          sleep 45
+
+          # Ξαναχρησιμοποίησε το ίδιο config volume του mc για να δει το alias
+          docker volume create mcconfig >/dev/null 2>&1 || true
+
+          # set alias (idempotent)
+          docker run --rm --network ${APP_NET} -v mcconfig:/root/.mc \
+            minio/mc alias set ${MINIO_ALIAS} ${MINIO_URL} ${MINIO_USER} ${MINIO_PASS} >/dev/null 2>&1 || true
+
+          echo "=== Λίστα αντικειμένων στο bucket ${MINIO_BUCKET} ==="
+          docker run --rm --network ${APP_NET} -v mcconfig:/root/.mc \
+            minio/mc ls ${MINIO_ALIAS}/${MINIO_BUCKET} || true
+
+          echo "=== Αναζήτηση για αρχεία flight-* ==="
+          docker run --rm --network ${APP_NET} -v mcconfig:/root/.mc \
+            minio/mc find ${MINIO_ALIAS}/${MINIO_BUCKET} -name 'flight-*' -print || true
+
+          echo "=== Στατιστικά bucket ==="
+          docker run --rm --network ${APP_NET} -v mcconfig:/root/.mc \
+            minio/mc stat ${MINIO_ALIAS}/${MINIO_BUCKET} || true
+        '''
+      }
+    }
+  }
+
+  post {
+    always {
+      // Κατέβασε τα services αλλά ΜΗ σβήνεις volumes για να μη χάνονται credentials/bucket
+      sh 'docker compose -f ${APP_COMPOSE} down || true'
+    }
+  }
+}

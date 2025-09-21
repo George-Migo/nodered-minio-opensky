@@ -1,0 +1,10 @@
+{
+  "name": "nodered-minio-flights-project",
+  "description": "A Node-RED project to plot flights and store data in MinIO",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "node-red-contrib-web-worldmap": "~5.5.2",
+    "node-red-contrib-minio-all": "~0.0.6"
+  }
+}

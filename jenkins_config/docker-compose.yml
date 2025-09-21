@@ -1,0 +1,16 @@
+version: "3.8"
+services:
+  jenkins:
+    build: .
+    container_name: jenkins
+    user: "0:0"                                    # πρόσβαση στο docker.sock
+    ports:
+      - "8080:8080"                                # Jenkins UI
+      - "50000:50000"                              # Jenkins agents (προαιρετικό)
+    volumes:
+      - jenkins_home:/var/jenkins_home             # persistence ρυθμίσεων Jenkins
+      - /var/run/docker.sock:/var/run/docker.sock  # μιλάει με Docker Desktop
+    restart: unless-stopped
+
+volumes:
+  jenkins_home:

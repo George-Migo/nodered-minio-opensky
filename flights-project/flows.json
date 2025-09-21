@@ -1,0 +1,338 @@
+[
+    {
+        "id": "f6f2187d.f17ca8",
+        "type": "tab",
+        "label": "Flow 1",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "dcc41a2d.900458",
+        "type": "http request",
+        "z": "f6f2187d.f17ca8",
+        "name": "get from Opensky Network",
+        "method": "GET",
+        "ret": "obj",
+        "url": "https://opensky-network.org/api/states/all",
+        "tls": "",
+        "x": 340,
+        "y": 200,
+        "wires": [
+            [
+                "f8f66972.c46d98",
+                "9c39a1f0eca4823c"
+            ]
+        ]
+    },
+    {
+        "id": "11e3a8e1.02dc67",
+        "type": "inject",
+        "z": "f6f2187d.f17ca8",
+        "name": "Start",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "0.1",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 90,
+        "y": 300,
+        "wires": [
+            [
+                "00e4eec82c6f2e4d"
+            ]
+        ]
+    },
+    {
+        "id": "f8f66972.c46d98",
+        "type": "function",
+        "z": "f6f2187d.f17ca8",
+        "name": "flights filter func",
+        "func": "var allFlights=msg.payload.states;\nvar filteredFlights = [];\n\nfor (var i = 0, len = allFlights.length; i < len; i++) {\n  // get longitude not null flights only\n  if (allFlights[i][5]){\n    filteredFlights.push(allFlights[i]);\n  }\n}\n\nmsg.payload=filteredFlights;\nreturn msg;\n\n",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 600,
+        "y": 200,
+        "wires": [
+            [
+                "46c224cbebdd523a",
+                "3ec1e7adac336f1a"
+            ]
+        ]
+    },
+    {
+        "id": "8bdd67c6.3db3d8",
+        "type": "function",
+        "z": "f6f2187d.f17ca8",
+        "name": "add flight to map",
+        "func": "var flight = {\n    name: msg.payload[1], \n    lat:msg.payload[6], \n    lon:msg.payload[5],\n    bearing:msg.payload[10],\n    speed:msg.payload[9],\n    layer:\"flights track\",\n    icon:\"plane\",\n    iconColor:\"red\",\n    extrainfo:msg.payload[0]\n};\n\nmsg.payload = flight;\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 790,
+        "y": 320,
+        "wires": [
+            [
+                "1cec7a64f763f661"
+            ]
+        ]
+    },
+    {
+        "id": "1cec7a64f763f661",
+        "type": "worldmap",
+        "z": "f6f2187d.f17ca8",
+        "name": "",
+        "lat": "",
+        "lon": "",
+        "zoom": "",
+        "layer": "",
+        "cluster": "",
+        "maxage": "",
+        "usermenu": "show",
+        "layers": "show",
+        "panit": "false",
+        "panlock": "false",
+        "zoomlock": "false",
+        "hiderightclick": "false",
+        "coords": "none",
+        "showgrid": "false",
+        "showruler": "false",
+        "allowFileDrop": "false",
+        "path": "/worldmap",
+        "overlist": "DR,CO,RA,DN",
+        "maplist": "OSMG,OSMC,EsriC,EsriS,UKOS",
+        "mapname": "",
+        "mapurl": "",
+        "mapopt": "",
+        "mapwms": false,
+        "x": 1040,
+        "y": 240,
+        "wires": []
+    },
+    {
+        "id": "9d977879f581268a",
+        "type": "buckets",
+        "z": "f6f2187d.f17ca8",
+        "buckets_name": "makeBucket",
+        "host": "33aa676011c3edd2",
+        "buckets_operation": "makeBucket",
+        "buckets_bucket": "flights-data",
+        "buckets_region": "",
+        "buckets_prefix": "",
+        "buckets_recursive": false,
+        "buckets_start_after": "",
+        "x": 310,
+        "y": 520,
+        "wires": [
+            [
+                "dcc41a2d.900458"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "e134e901441b0dd8",
+        "type": "function",
+        "z": "f6f2187d.f17ca8",
+        "name": "Prepare for MinIO",
+        "func": "const flightData = msg.payload;\nconst icao24 = flightData[0];\nconst timestamp = new Date().toISOString();\n\nconst objectName = `flight_${icao24}_${timestamp}.json`;\nconst jsonString = JSON.stringify(flightData, null, 2);\nconst contentBuffer = Buffer.from(jsonString);\n\n// Δημιουργούμε το καθαρό μήνυμα...\nconst newMsg = {\n    // ...και τοποθετούμε το Buffer στο msg.stream,\n    // όπως απαιτεί η τεκμηρίωση!\n    stream: contentBuffer,\n    objectName: objectName\n};\n\nreturn newMsg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 790,
+        "y": 440,
+        "wires": [
+            [
+                "5a13f34e7e0c2edd",
+                "70aa1fae36020bbe"
+            ]
+        ]
+    },
+    {
+        "id": "5a13f34e7e0c2edd",
+        "type": "objects",
+        "z": "f6f2187d.f17ca8",
+        "objects_name": "putObject",
+        "host": "33aa676011c3edd2",
+        "objects_operation": "putObject",
+        "objects_bucket": "flights-data",
+        "objects_object": "msg.objectName",
+        "objects_offset": "",
+        "objects_length": "",
+        "objects_stream": "",
+        "objects_size": "",
+        "objects_metadata": "",
+        "objects_sourceobject": "",
+        "objects_conditions": "",
+        "objects_objectslist": [],
+        "objects_prefix": "",
+        "objects_etag": "",
+        "objects_datetime": "",
+        "x": 1080,
+        "y": 360,
+        "wires": [
+            [],
+            [
+                "9c490ddc67e41e11"
+            ]
+        ]
+    },
+    {
+        "id": "9c490ddc67e41e11",
+        "type": "debug",
+        "z": "f6f2187d.f17ca8",
+        "name": "E - Last",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1180,
+        "y": 540,
+        "wires": []
+    },
+    {
+        "id": "46c224cbebdd523a",
+        "type": "split",
+        "z": "f6f2187d.f17ca8",
+        "name": "split flights",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "",
+        "property": "payload",
+        "x": 470,
+        "y": 380,
+        "wires": [
+            [
+                "8bdd67c6.3db3d8",
+                "e134e901441b0dd8",
+                "6e25c0e1ff722ba3"
+            ]
+        ]
+    },
+    {
+        "id": "00e4eec82c6f2e4d",
+        "type": "buckets",
+        "z": "f6f2187d.f17ca8",
+        "buckets_name": "bucketExists",
+        "host": "33aa676011c3edd2",
+        "buckets_operation": "bucketExists",
+        "buckets_bucket": "flights-data",
+        "buckets_region": "",
+        "buckets_prefix": "",
+        "buckets_recursive": false,
+        "buckets_start_after": "",
+        "x": 150,
+        "y": 400,
+        "wires": [
+            [
+                "dcc41a2d.900458"
+            ],
+            [
+                "9d977879f581268a"
+            ]
+        ]
+    },
+    {
+        "id": "6e25c0e1ff722ba3",
+        "type": "debug",
+        "z": "f6f2187d.f17ca8",
+        "d": true,
+        "name": "C - Single Flight",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 600,
+        "y": 560,
+        "wires": []
+    },
+    {
+        "id": "9c39a1f0eca4823c",
+        "type": "debug",
+        "z": "f6f2187d.f17ca8",
+        "d": true,
+        "name": "A - Raw Data",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 590,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "3ec1e7adac336f1a",
+        "type": "debug",
+        "z": "f6f2187d.f17ca8",
+        "d": true,
+        "name": "B - Filtered Flights",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 870,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "70aa1fae36020bbe",
+        "type": "debug",
+        "z": "f6f2187d.f17ca8",
+        "d": true,
+        "name": "D - Ready for MinIO",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 920,
+        "y": 580,
+        "wires": []
+    },
+    {
+        "id": "33aa676011c3edd2",
+        "type": "minio-config",
+        "name": "MinIO Instance",
+        "host": "minio",
+        "port": "9000",
+        "useSsl": false
+    }
+]
