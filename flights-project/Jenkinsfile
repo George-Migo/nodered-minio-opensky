@@ -112,6 +112,18 @@ pipeline {
         '''
       }
     }
+
+    stage('Archive bucket') {
+      steps {
+        sh '''
+          echo "📦 Δημιουργώ zip με όλα τα artifacts…"
+          cd ${ART_DIR}
+          zip -r ../flights-data.zip .
+        '''
+        archiveArtifacts artifacts: 'flights-data.zip', fingerprint: true
+      }
+    }
+
   }
 
   post {
