@@ -14,6 +14,7 @@ pipeline {
     MINIO_PASS  = 'minioadmin'
     MINIO_BUCKET= 'flights-data'   
     APP_NET     = 'flightsnet'     // <-- το σταθερό όνομα δικτύου από το compose
+    ART_DIR = 'artifacts'
   }
 
   stages {
@@ -116,13 +117,21 @@ pipeline {
     stage('Archive bucket') {
       steps {
         sh '''
-          echo "📦 Δημιουργώ zip με όλα τα artifacts…"
-          cd ${ART_DIR}
-          zip -r ../flights-data.zip .
+          set -e
+          # mirror του bucket στον φάκελο artifacts/
+          rm -rf "${ART_DIR}"
+          mkdir -p "${ART_DIR}"
+          docker run --rm --network ${APP_NET} -v mcconfig:/root/.mc -v "$PWD/${ART_DIR}:/out" \
+            minio/mc mirror --overwrite ${MINIO_ALIAS}/${MINIO_BUCKET} /out
+
+          echo "📦 Δημιουργώ tar.gz με όλα τα artifacts…"
+          tar -czf flights-data.tar.gz -C "${ART_DIR}" .
+          ls -al flights-data.tar.gz
         '''
-        archiveArtifacts artifacts: 'flights-data.zip', fingerprint: true
+        archiveArtifacts artifacts: 'flights-data.tar.gz', fingerprint: true
       }
     }
+
 
   }
 
